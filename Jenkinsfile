@@ -18,14 +18,15 @@ pipeline {
         }
 
         stage('Build & Test') {
-            when {
-                changeRequest()
-            }
             steps {
-                // 1. Built-in command to set GitHub status to PENDING
-                githubNotify context: 'Jenkins CI/Build', description: 'Building Spring Boot App...', status: 'PENDING'
+                // This uses the 'publishChecks' step found in your logs
+                publishChecks name: "Jenkins Build",
+                              title: "Compiling Spring Boot App",
+                              summary: "Running on Java 21",
+                              status: 'IN_PROGRESS'
 
-                sh "./gradlew clean build --no-daemon"
+                // Using 'bat' for Windows since your logs show a Windows path
+                bat "./gradlew clean build --no-daemon"
             }
         }
 
@@ -38,12 +39,16 @@ pipeline {
 
     post {
         success {
-            // 2. Set status to SUCCESS
-            githubNotify context: 'Jenkins CI/Build', description: 'Build passed!', status: 'SUCCESS'
+            publishChecks name: "Jenkins Build",
+                          title: "Build Success",
+                          summary: "All tests passed.",
+                          conclusion: 'SUCCESS'
         }
         failure {
-            // 3. Set status to FAILURE
-            githubNotify context: 'Jenkins CI/Build', description: 'Build failed. Check logs.', status: 'FAILURE'
+            publishChecks name: "Jenkins Build",
+                          title: "Build Failed",
+                          summary: "Check Jenkins logs for details.",
+                          conclusion: 'FAILURE'
         }
         always {
             cleanWs()
