@@ -22,8 +22,8 @@ pipeline {
                 changeRequest()
             }
             steps {
-                // Signal GitHub start
-                setGitHubPullRequestStatus('PENDING', 'Building Spring Boot App with Java 21...')
+                // 1. Built-in command to set GitHub status to PENDING
+                githubNotify context: 'Jenkins CI/Build', description: 'Building Spring Boot App...', status: 'PENDING'
 
                 sh "./gradlew clean build --no-daemon"
             }
@@ -38,26 +38,15 @@ pipeline {
 
     post {
         success {
-            setGitHubPullRequestStatus('SUCCESS', 'Build passed & JAR archived!')
+            // 2. Set status to SUCCESS
+            githubNotify context: 'Jenkins CI/Build', description: 'Build passed!', status: 'SUCCESS'
         }
         failure {
-            setGitHubPullRequestStatus('FAILURE', 'Build failed. Check Jenkins logs.')
+            // 3. Set status to FAILURE
+            githubNotify context: 'Jenkins CI/Build', description: 'Build failed. Check logs.', status: 'FAILURE'
         }
         always {
             cleanWs()
         }
     }
-}
-
-// Simplified Helper Function
-def setGitHubPullRequestStatus(String state, String message) {
-    step([
-        $class: 'GitHubCommitStatusSetter',
-        reposSource: [$class: 'AnyDefinedRepositorySource'],
-        contextSource: [$class: 'DefaultStatusContextSource', context: 'Jenkins CI/Build'],
-        statusResultSource: [
-            $class: 'ConditionalStatusResultSource',
-            results: [[$class: 'AnyBuildResult', message: message, state: state]]
-        ]
-    ])
 }
