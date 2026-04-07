@@ -8,33 +8,32 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                updateGitHubStatus('Checkout', 'PENDING', 'Checking out code...')
+                sendGitHubStatus('PENDING', 'Checkout', 'Checking out code...')
                 checkout scm
-                updateGitHubStatus('Checkout', 'SUCCESS', 'Code checked out.')
+                sendGitHubStatus('SUCCESS', 'Checkout', 'Code checked out.')
             }
         }
 
         stage('Build & Test') {
             steps {
-                updateGitHubStatus('Build & Test', 'PENDING', 'Running Gradle build...')
+                sendGitHubStatus('PENDING', 'Build & Test', 'Running Gradle build...')
                 bat "gradlew.bat clean build --no-daemon"
-                updateGitHubStatus('Build & Test', 'SUCCESS', 'Build and tests passed!')
+                sendGitHubStatus('SUCCESS', 'Build & Test', 'Build and tests passed!')
             }
         }
 
         stage('Archive') {
             steps {
-                updateGitHubStatus('Archive', 'PENDING', 'Archiving artifacts...')
+                sendGitHubStatus('PENDING', 'Archive', 'Archiving artifacts...')
                 archiveArtifacts artifacts: 'build/libs/*.jar', allowEmptyArchive: true
-                updateGitHubStatus('Archive', 'SUCCESS', 'Artifacts stored.')
+                sendGitHubStatus('SUCCESS', 'Archive', 'Artifacts stored.')
             }
         }
     }
 
     post {
         failure {
-            // This catches any stage that failed and marks the overall build failed
-            updateGitHubStatus('Jenkins Pipeline', 'FAILURE', 'Pipeline failed. Check logs.')
+            sendGitHubStatus('FAILURE', 'Overall Pipeline', 'Build failed. Check Jenkins logs.')
         }
         always {
             cleanWs()
@@ -42,15 +41,31 @@ pipeline {
     }
 }
 
-// Helper function using the base 'step' command to avoid 'NoSuchMethod' errors
-def updateGitHubStatus(String contextName, String state, String msg) {
-    step([
-        $class: 'GitHubCommitStatusSetter',
-        reposSource: [$class: 'AnyDefinedRepositorySource'],
-        contextSource: [$class: 'StaticStatusContextSource', context: "Jenkins/${contextName}"],
-        statusResultSource: [
-            $class: 'ConditionalStatusResultSource',
-            results: [[$class: 'AnyBuildResult', message: msg, state: state]]
-        ]
-    ])
+def sendGitHubStatus(String state, String context, String description) {
+    // This helper uses standard Jenkins environment variables to find the PR/Commit
+    // It uses 'withCredentials' to get your GitHub App token safely
+    withCredentials([usernamePassword(credentialsId: 'github-app', passwordVariable: 'GITHUB_TOKEN', usernameVariable: 'UNUSED')]) {
+        script {
+            def payload = """
+            {
+              "state": "${state.toLowerCase()}",
+              "target_url": "${env.BUILD_URL}",
+              "description": "${description}",
+              "context": "Jenkins / ${context}"
+            }
+            """
+            // Since you are on Windows, we use 'bat' to call curl
+            // We strip 'https://github.com/' to get the 'owner/repo' path
+            def repoPath = env.GIT_URL.replace("https://github.com/", "").replace(".git", "")
+
+            bat """
+            curl -L -X POST ^
+            -H "Accept: application/vnd.github+json" ^
+            -H "Authorization: Bearer %GITHUB_TOKEN%" ^
+            -H "X-GitHub-Api-Version: 2022-11-28" ^
+            https://api.github.com/repos/${repoPath}/statuses/${env.GIT_COMMIT} ^
+            -d "${payload.replaceAll('\n', '').replaceAll('"', '\"')}"
+            """
+        }
+    }
 }
