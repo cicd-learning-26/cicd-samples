@@ -5,51 +5,31 @@ pipeline {
         jdk 'jdk-21'
     }
 
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 30, unit: 'MINUTES')
-    }
-
     stages {
-        stage('Checkout') {
+        stage('CI Pipeline') {
             steps {
-                checkout scm
-            }
-        }
+                // withChecks automatically maps Pipeline stages to GitHub Check steps
+                withChecks('Jenkins CI Pipeline') {
+                    script {
+                        stage('Checkout') {
+                            checkout scm
+                        }
 
-        stage('Build & Test') {
-            steps {
-                // This uses the 'publishChecks' step found in your logs
-                publishChecks name: "Jenkins Build",
-                              title: "Compiling Spring Boot App",
-                              summary: "Running on Java 21",
-                              status: 'IN_PROGRESS'
+                        stage('Build & Test') {
+                            // Using bat for your Windows environment
+                            bat "gradlew.bat clean build --no-daemon"
+                        }
 
-                // Using 'bat' for Windows since your logs show a Windows path
-                bat "./gradlew clean build --no-daemon"
-            }
-        }
-
-        stage('Archive Artifacts') {
-            steps {
-                archiveArtifacts artifacts: 'build/libs/*.jar', allowEmptyArchive: true
+                        stage('Archive') {
+                            archiveArtifacts artifacts: 'build/libs/*.jar', allowEmptyArchive: true
+                        }
+                    }
+                }
             }
         }
     }
 
     post {
-        success {
-            publishChecks name: "Jenkins Build",
-                          title: "Build Success",
-                          summary: "All tests passed.",
-                          conclusion: 'SUCCESS'
-        }
-        failure {
-            publishChecks name: "Jenkins Build",
-                          title: "Build Failed",
-                          summary: "Check Jenkins logs for details.",
-                          conclusion: 'FAILURE'
-        }
         always {
             cleanWs()
         }
