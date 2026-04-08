@@ -42,30 +42,16 @@ pipeline {
 }
 
 def sendGitHubStatus(String state, String context, String description) {
-    // This helper uses standard Jenkins environment variables to find the PR/Commit
-    // It uses 'withCredentials' to get your GitHub App token safely
     withCredentials([usernamePassword(credentialsId: 'github-app', passwordVariable: 'GITHUB_TOKEN', usernameVariable: 'UNUSED')]) {
         script {
-            def payload = """
-            {
-              "state": "${state.toLowerCase()}",
-              "target_url": "${env.BUILD_URL}",
-              "description": "${description}",
-              "context": "Jenkins / ${context}"
-            }
-            """
-            // Since you are on Windows, we use 'bat' to call curl
-            // We strip 'https://github.com/' to get the 'owner/repo' path
+            // 1. Create a single-line JSON string with escaped quotes
+            // 2. We use 'replace' to ensure there are no newlines in the final command
+            def payload = "{\"state\":\"${state.toLowerCase()}\",\"target_url\":\"${env.BUILD_URL}\",\"description\":\"${description}\",\"context\":\"Jenkins / ${context}\"}"
+
             def repoPath = env.GIT_URL.replace("https://github.com/", "").replace(".git", "")
 
-            bat """
-            curl -L -X POST ^
-            -H "Accept: application/vnd.github+json" ^
-            -H "Authorization: Bearer %GITHUB_TOKEN%" ^
-            -H "X-GitHub-Api-Version: 2022-11-28" ^
-            https://api.github.com/repos/${repoPath}/statuses/${env.GIT_COMMIT} ^
-            -d "${payload.replaceAll('\n', '').replaceAll('"', '\"')}"
-            """
+            // Using a single-line bat command to avoid shell expansion issues
+            bat "curl -L -X POST -H \"Accept: application/vnd.github+json\" -H \"Authorization: Bearer %GITHUB_TOKEN%\" -H \"X-GitHub-Api-Version: 2022-11-28\" https://api.github.com/repos/${repoPath}/statuses/${env.GIT_COMMIT} -d \"${payload.replace('"', '\\"')}\""
         }
     }
 }
