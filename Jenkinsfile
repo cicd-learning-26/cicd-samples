@@ -39,11 +39,22 @@ pipeline {
     }
 
     post {
+        success {
+            script {
+                // Call the status helper for the green tick
+                sendGitHubStatus('SUCCESS', 'Overall Pipeline', 'Build passed!')
+
+                // Call the comment helper for the custom message
+                def prMessage = """CI pipeline is successful.
+
+    For deploying the project to sandbox before merging use the following comment:
+    `/deploy-to-sbox`"""
+
+                addGitHubComment(prMessage)
+            }
+        }
         failure {
             sendGitHubStatus('FAILURE', 'Overall Pipeline', 'Build failed. Check Jenkins logs.')
-        }
-        always {
-            cleanWs()
         }
     }
 }
@@ -69,6 +80,27 @@ def sendGitHubStatus(String state, String context, String description) {
                 "-H \"X-GitHub-Api-Version: 2022-11-28\" " +
                 "https://api.github.com/repos/${repoPath}/statuses/${env.GIT_COMMIT} " +
                 "-d \"${payload.replace('"', '\\"')}\""
+        }
+    }
+}
+
+def addGitHubComment(String message) {
+    withCredentials([usernamePassword(credentialsId: 'github-app', passwordVariable: 'GITHUB_TOKEN', usernameVariable: 'UNUSED')]) {
+        script {
+            // Encode the message to handle newlines and special characters for JSON
+            def jsonMessage = groovy.json.JsonOutput.toJson([body: message])
+
+            def repoPath = env.GIT_URL.replace("https://github.com/", "").replace(".git", "")
+
+            // For PRs, the ID is available via CHANGE_ID environment variable
+            bat """
+            curl -L -X POST ^
+            -H "Accept: application/vnd.github+json" ^
+            -H "Authorization: Bearer %GITHUB_TOKEN%" ^
+            -H "X-GitHub-Api-Version: 2022-11-28" ^
+            https://api.github.com/repos/${repoPath}/issues/${env.CHANGE_ID}/comments ^
+            -d "${jsonMessage.replace('"', '\\"')}"
+            """
         }
     }
 }
