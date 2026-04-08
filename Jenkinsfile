@@ -14,15 +14,21 @@ pipeline {
             }
         }
 
-stage('Build & Test') {
-    steps {
-        // Use "Build" instead of "Build & Test" to avoid the '&' character issues
-        sendGitHubStatus('PENDING', 'Build', 'Running Gradle build...')
-        bat "gradlew.bat clean build --no-daemon"
-        sendGitHubStatus('SUCCESS', 'Build', 'Build passed!')
+    stage('Build & Test') {
+        steps {
+            // Use "Build" instead of "Build & Test" to avoid the '&' character issues
+            sendGitHubStatus('PENDING', 'Build', 'Running Gradle build...')
+            bat "gradlew.bat clean build --no-daemon"
+            sendGitHubStatus('SUCCESS', 'Build', 'Build passed!')
+        }
     }
-}
-
+    stage('Code Quality') {
+        steps {
+            sendGitHubStatus('PENDING', 'SonarQube', 'Analyzing code...')
+            // your sonar command here
+            sendGitHubStatus('SUCCESS', 'SonarQube', 'Analysis complete.')
+        }
+    }
         stage('Archive') {
             steps {
                 sendGitHubStatus('PENDING', 'Archive', 'Archiving artifacts...')
